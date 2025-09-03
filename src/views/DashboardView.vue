@@ -17,7 +17,8 @@ const fetchKeywords = async () => {
   isLoading.value = true;
   try {
     const response = await apiClient.get('/keyword/keywords');
-    keywords.value = response.data.keywords; // 백엔드에서 이미 정렬해서 줌
+    console.log('키워드 데이터:', response.data.keywords); // 디버깅용
+    keywords.value = response.data.keywords;
   } catch (error) {
     console.error("키워드 목록을 불러오는 데 실패했습니다:", error);
     alert('키워드 목록을 불러오는 데 실패했습니다.');
@@ -28,27 +29,37 @@ const fetchKeywords = async () => {
 
 onMounted(fetchKeywords);
 
-// --- 다른 함수들은 이전과 동일하게 유지 ---
-
 const handleCreateKeyword = async () => {
   if (!newKeyword.value.keyword_text || !newKeyword.value.post_url) {
-    alert('키워드와 URL을 모두 입력해주세요.'); return;
+    alert('키워드와 URL을 모두 입력해주세요.'); 
+    return;
   }
   try {
     await apiClient.post('/keyword/keywords', newKeyword.value);
     newKeyword.value = { keyword_text: '', post_url: '', priority: '중' };
     fetchKeywords();
-  } catch (error) { console.error("키워드 생성 실패:", error); alert('키워드 생성에 실패했습니다.'); }
+  } catch (error) { 
+    console.error("키워드 생성 실패:", error); 
+    alert('키워드 생성에 실패했습니다.'); 
+  }
 };
 
 const handleCheckRank = async (keywordId) => {
   checkingId.value = keywordId;
   try {
+    console.log(`키워드 ID ${keywordId} 순위 확인 요청 중...`);
     const response = await apiClient.post(`/keyword/keywords/${keywordId}/check`);
-    alert(`순위 확인 완료! 결과: ${response.data.message}`);
-    await fetchKeywords();
-  } catch (error) { console.error("순위 확인 실패:", error); alert('순위 확인 중 오류가 발생했습니다.');
-  } finally { checkingId.value = null; }
+    console.log('순위 확인 응답:', response.data);
+    
+    alert(`순위 확인 완료!\n${response.data.message}`);
+    await fetchKeywords(); // 데이터 새로고침
+  } catch (error) { 
+    console.error("순위 확인 실패:", error); 
+    const errorMessage = error.response?.data?.message || '순위 확인 중 오류가 발생했습니다.';
+    alert(errorMessage);
+  } finally { 
+    checkingId.value = null; 
+  }
 };
 
 const handleDeleteKeyword = async (keywordId) => {
@@ -57,7 +68,10 @@ const handleDeleteKeyword = async (keywordId) => {
     await apiClient.delete(`/keyword/keywords/${keywordId}`);
     alert('키워드가 삭제되었습니다.');
     fetchKeywords();
-  } catch (error) { console.error("키워드 삭제 실패:", error); alert('키워드 삭제에 실패했습니다.'); }
+  } catch (error) { 
+    console.error("키워드 삭제 실패:", error); 
+    alert('키워드 삭제에 실패했습니다.'); 
+  }
 };
 
 const openEditModal = (keyword) => {
@@ -78,19 +92,38 @@ const handleUpdateKeyword = async () => {
     alert('키워드가 성공적으로 수정되었습니다.');
     closeEditModal();
     fetchKeywords();
-  } catch (error) { console.error("키워드 수정 실패:", error); alert('키워드 수정에 실패했습니다.'); }
+  } catch (error) { 
+    console.error("키워드 수정 실패:", error); 
+    alert('키워드 수정에 실패했습니다.'); 
+  }
 };
 
-// --- 상태(순위) 표시를 위한 포맷팅 함수 ---
+// 수정된 상태(순위) 표시 함수
 const formatStatus = (keyword) => {
-  if (keyword.ranking) {
-    // section 이름이 있으면 함께 표시, 없으면 기존 상태 표시
-    const sectionName = keyword.section ? `${keyword.section} ` : `${keyword.ranking_status} `;
+  console.log('formatStatus 호출됨:', keyword); // 디버깅용
+  
+  // 순위가 있는 경우
+  if (keyword.ranking && keyword.ranking > 0) {
+    const sectionName = keyword.section || keyword.ranking_status || '알 수 없음';
     return `${sectionName} (${keyword.ranking}위)`;
   }
-  return keyword.ranking_status; // 순위가 없으면 그냥 상태만 표시
-}
+  
+  // 순위가 없는 경우 상태만 표시
+  return keyword.ranking_status || '확인 대기';
+};
 
+// 상태에 따른 CSS 클래스 반환
+const getStatusClass = (keyword) => {
+  if (keyword.ranking && keyword.ranking > 0) {
+    if (keyword.ranking <= 3) return 'status-excellent';
+    if (keyword.ranking <= 10) return 'status-good';
+    return 'status-normal';
+  }
+  if (keyword.ranking_status === '노출X') {
+    return 'status-not-exposed';
+  }
+  return 'status-waiting';
+};
 </script>
 
 <template>
@@ -121,12 +154,14 @@ const formatStatus = (keyword) => {
               <div class="keyword-url">{{ keyword.post_url }}</div>
             </td>
             <td>
-              {{ formatStatus(keyword) }}
+              <span :class="['status-badge', getStatusClass(keyword)]">
+                {{ formatStatus(keyword) }}
+              </span>
             </td>
             <td>{{ keyword.last_checked_at ? new Date(keyword.last_checked_at).toLocaleString('ko-KR') : '아직 확인 안 함' }}</td>
             <td class="management-buttons">
               <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id" class="check-btn">
-                {{ checkingId === keyword.id ? '확인중' : '순위확인' }}
+                {{ checkingId === keyword.id ? '확인중...' : '순위확인' }}
               </button>
               <button @click="openEditModal(keyword)" class="edit-btn">수정</button>
               <button @click="handleDeleteKeyword(keyword.id)" class="delete-btn">삭제</button>
@@ -182,7 +217,6 @@ const formatStatus = (keyword) => {
 </template>
 
 <style scoped>
-/* CSS는 이전과 동일하게 유지해도 됩니다. */
 .dashboard-container {
   padding: 2rem;
   max-width: 1200px;
@@ -236,10 +270,51 @@ h1 { font-size: 2rem; }
 }
 
 .check-btn { background-color: #28a745; color: white; }
-.check-btn:disabled { background-color: #6c757d; cursor: not-allowed; }
+.check-btn:disabled { 
+  background-color: #6c757d; 
+  cursor: not-allowed; 
+}
 .add-btn { background-color: #007bff; color: white; }
 .edit-btn { background-color: #ffc107; color: #212529; }
 .delete-btn { background-color: #dc3545; color: white; }
+
+/* 상태 배지 스타일 */
+.status-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: bold;
+}
+
+.status-excellent {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-good {
+  background-color: #d1ecf1;
+  color: #0c5460;
+  border: 1px solid #bee5eb;
+}
+
+.status-normal {
+  background-color: #fff3cd;
+  color: #856404;
+  border: 1px solid #ffeeba;
+}
+
+.status-not-exposed {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-waiting {
+  background-color: #e2e3e5;
+  color: #495057;
+  border: 1px solid #d6d8db;
+}
 
 .modal-overlay {
   position: fixed; top: 0; left: 0;
