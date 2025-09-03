@@ -6,6 +6,7 @@ const keywords = ref([]);
 const isLoading = ref(true);
 const newKeyword = ref({
   keyword_text: '',
+  post_title: '',  // 추가
   post_url: '',
   priority: '중'
 });
@@ -36,7 +37,7 @@ const handleCreateKeyword = async () => {
   }
   try {
     await apiClient.post('/keyword/keywords', newKeyword.value);
-    newKeyword.value = { keyword_text: '', post_url: '', priority: '중' };
+    newKeyword.value = { keyword_text: '', post_title: '', post_url: '', priority: '중' };
     fetchKeywords();
   } catch (error) { 
     console.error("키워드 생성 실패:", error); 
@@ -87,8 +88,13 @@ const closeEditModal = () => {
 const handleUpdateKeyword = async () => {
   if (!editingKeyword.value) return;
   try {
-    const { id, keyword_text, post_url, priority } = editingKeyword.value;
-    await apiClient.put(`/keyword/keywords/${id}`, { keyword_text, post_url, priority });
+    const { id, keyword_text, post_title, post_url, priority } = editingKeyword.value;
+    await apiClient.put(`/keyword/keywords/${id}`, { 
+      keyword_text, 
+      post_title,  // 이 부분 추가
+      post_url, 
+      priority 
+    });
     alert('키워드가 성공적으로 수정되었습니다.');
     closeEditModal();
     fetchKeywords();
@@ -168,6 +174,7 @@ const getStatusClass = (keyword) => {
             <td>{{ keyword.priority }}</td>
             <td>
               <div class="keyword-text">{{ keyword.keyword_text }}</div>
+              <div class="keyword-title" v-if="keyword.post_title">📝 {{ keyword.post_title }}</div>  <!-- 추가 -->
               <div class="keyword-url">{{ keyword.post_url }}</div>
             </td>
             <td>
@@ -193,6 +200,7 @@ const getStatusClass = (keyword) => {
             </td>
             <td>
               <input type="text" v-model="newKeyword.keyword_text" placeholder="새 키워드를 입력하세요">
+              <input type="text" v-model="newKeyword.post_title" placeholder="게시물 제목" class="title-input">  <!-- 추가 -->
               <input type="url" v-model="newKeyword.post_url" placeholder="https://..." class="url-input">
             </td>
             <td colspan="2"></td>
@@ -219,6 +227,10 @@ const getStatusClass = (keyword) => {
         <div class="form-group">
           <label for="edit-keyword">키워드</label>
           <input type="text" id="edit-keyword" v-model="editingKeyword.keyword_text" required>
+        </div>
+        <div class="form-group">  <!-- 추가 -->
+          <label for="edit-title">게시물 제목</label>
+          <input type="text" id="edit-title" v-model="editingKeyword.post_title" placeholder="게시물 제목 (선택사항)">
         </div>
         <div class="form-group">
           <label for="edit-url">URL</label>
@@ -356,4 +368,14 @@ h1 { font-size: 2rem; }
 }
 .save-btn { background-color: #007bff; color: white; }
 .cancel-btn { background-color: #6c757d; color: white; }
+.title-input {  /* 이 부분 추가 */
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.keyword-title {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0.2rem 0;
+  font-style: italic;
+}
 </style>
