@@ -104,13 +104,30 @@ const formatStatus = (keyword) => {
   
   // 순위가 있는 경우
   if (keyword.ranking && keyword.ranking > 0) {
-    const sectionName = keyword.section || keyword.ranking_status || '알 수 없음';
+    // section이 있으면 사용, 없으면 ranking_status 대신 적절한 기본값
+    let sectionName = keyword.section;
+    
+    // section이 없거나 ranking_status와 같으면 적절한 섹션명 설정
+    if (!sectionName || sectionName === keyword.ranking_status) {
+      // ranking_status에 따라 적절한 섹션명 할당
+      if (keyword.ranking_status === 'VIEW') {
+        sectionName = 'VIEW';
+      } else if (keyword.ranking_status === '카페') {
+        sectionName = '카페';
+      } else if (keyword.ranking_status === '블로그') {
+        sectionName = '블로그';
+      } else {
+        sectionName = '통합검색'; // 기본값
+      }
+    }
+    
     return `${sectionName} (${keyword.ranking}위)`;
   }
   
   // 순위가 없는 경우 상태만 표시
   return keyword.ranking_status || '확인 대기';
 };
+
 
 // 상태에 따른 CSS 클래스 반환
 const getStatusClass = (keyword) => {
