@@ -9,19 +9,15 @@ const newKeyword = ref({
   post_url: '',
   priority: '중'
 });
-
 const checkingId = ref(null);
-
-// --- 수정/삭제 기능을 위한 변수 추가 ---
-const isEditModalOpen = ref(false); // 수정 모달의 표시 여부
-const editingKeyword = ref(null); // 현재 수정 중인 키워드 데이터
+const isEditModalOpen = ref(false);
+const editingKeyword = ref(null);
 
 const fetchKeywords = async () => {
   isLoading.value = true;
   try {
     const response = await apiClient.get('/keyword/keywords');
-    // 최신순으로 정렬 (id가 큰 것이 최신)
-    keywords.value = response.data.keywords.sort((a, b) => b.id - a.id);
+    keywords.value = response.data.keywords; // 백엔드에서 이미 정렬해서 줌
   } catch (error) {
     console.error("키워드 목록을 불러오는 데 실패했습니다:", error);
     alert('키워드 목록을 불러오는 데 실패했습니다.');
@@ -32,19 +28,17 @@ const fetchKeywords = async () => {
 
 onMounted(fetchKeywords);
 
+// --- 다른 함수들은 이전과 동일하게 유지 ---
+
 const handleCreateKeyword = async () => {
   if (!newKeyword.value.keyword_text || !newKeyword.value.post_url) {
-    alert('키워드와 URL을 모두 입력해주세요.');
-    return;
+    alert('키워드와 URL을 모두 입력해주세요.'); return;
   }
   try {
     await apiClient.post('/keyword/keywords', newKeyword.value);
     newKeyword.value = { keyword_text: '', post_url: '', priority: '중' };
-    fetchKeywords(); // 목록 새로고침
-  } catch (error) {
-    console.error("키워드 생성에 실패했습니다:", error);
-    alert('키워드 생성에 실패했습니다.');
-  }
+    fetchKeywords();
+  } catch (error) { console.error("키워드 생성 실패:", error); alert('키워드 생성에 실패했습니다.'); }
 };
 
 const handleCheckRank = async (keywordId) => {
@@ -53,64 +47,50 @@ const handleCheckRank = async (keywordId) => {
     const response = await apiClient.post(`/keyword/keywords/${keywordId}/check`);
     alert(`순위 확인 완료! 결과: ${response.data.message}`);
     await fetchKeywords();
-  } catch (error) {
-    console.error("순위 확인에 실패했습니다:", error);
-    alert('순위 확인 중 오류가 발생했습니다.');
-  } finally {
-    checkingId.value = null;
-  }
+  } catch (error) { console.error("순위 확인 실패:", error); alert('순위 확인 중 오류가 발생했습니다.');
+  } finally { checkingId.value = null; }
 };
 
-// --- 삭제(Delete) 함수 추가 ---
 const handleDeleteKeyword = async (keywordId) => {
-  if (!confirm('정말로 이 키워드를 삭제하시겠습니까?')) {
-    return;
-  }
+  if (!confirm('정말로 이 키워드를 삭제하시겠습니까?')) return;
   try {
     await apiClient.delete(`/keyword/keywords/${keywordId}`);
     alert('키워드가 삭제되었습니다.');
-    fetchKeywords(); // 목록 새로고침
-  } catch (error) {
-    console.error("키워드 삭제에 실패했습니다:", error);
-    alert('키워드 삭제에 실패했습니다.');
-  }
+    fetchKeywords();
+  } catch (error) { console.error("키워드 삭제 실패:", error); alert('키워드 삭제에 실패했습니다.'); }
 };
 
-// --- 수정(Update) 관련 함수들 추가 ---
-
-// 1. 수정 모달을 여는 함수
 const openEditModal = (keyword) => {
-  // keyword 객체를 복사하여 수정 중 취소해도 원본이 바뀌지 않도록 함
   editingKeyword.value = { ...keyword };
   isEditModalOpen.value = true;
 };
 
-// 2. 수정 모달을 닫는 함수
 const closeEditModal = () => {
   isEditModalOpen.value = false;
   editingKeyword.value = null;
 };
 
-// 3. '저장' 버튼을 눌렀을 때 실제 업데이트 요청을 보내는 함수
 const handleUpdateKeyword = async () => {
   if (!editingKeyword.value) return;
-
   try {
     const { id, keyword_text, post_url, priority } = editingKeyword.value;
-    // 백엔드에 PUT 요청 전송
-    await apiClient.put(`/keyword/keywords/${id}`, {
-      keyword_text,
-      post_url,
-      priority
-    });
+    await apiClient.put(`/keyword/keywords/${id}`, { keyword_text, post_url, priority });
     alert('키워드가 성공적으로 수정되었습니다.');
-    closeEditModal(); // 모달 닫기
-    fetchKeywords(); // 목록 새로고침
-  } catch (error) {
-    console.error("키워드 수정에 실패했습니다:", error);
-    alert('키워드 수정에 실패했습니다.');
-  }
+    closeEditModal();
+    fetchKeywords();
+  } catch (error) { console.error("키워드 수정 실패:", error); alert('키워드 수정에 실패했습니다.'); }
 };
+
+// --- 상태(순위) 표시를 위한 포맷팅 함수 ---
+const formatStatus = (keyword) => {
+  if (keyword.ranking) {
+    // section 이름이 있으면 함께 표시, 없으면 기존 상태 표시
+    const sectionName = keyword.section ? `${keyword.section} ` : `${keyword.ranking_status} `;
+    return `${sectionName} (${keyword.ranking}위)`;
+  }
+  return keyword.ranking_status; // 순위가 없으면 그냥 상태만 표시
+}
+
 </script>
 
 <template>
@@ -141,8 +121,7 @@ const handleUpdateKeyword = async () => {
               <div class="keyword-url">{{ keyword.post_url }}</div>
             </td>
             <td>
-              {{ keyword.ranking_status }}
-              <span v-if="keyword.ranking" class="rank"> ({{ keyword.ranking }}위)</span>
+              {{ formatStatus(keyword) }}
             </td>
             <td>{{ keyword.last_checked_at ? new Date(keyword.last_checked_at).toLocaleString('ko-KR') : '아직 확인 안 함' }}</td>
             <td class="management-buttons">
@@ -157,9 +136,7 @@ const handleUpdateKeyword = async () => {
           <tr class="add-new-row">
             <td>
               <select v-model="newKeyword.priority">
-                <option>상</option>
-                <option selected>중</option>
-                <option>하</option>
+                <option>상</option><option selected>중</option><option>하</option>
               </select>
             </td>
             <td>
@@ -184,9 +161,7 @@ const handleUpdateKeyword = async () => {
         <div class="form-group">
           <label for="edit-priority">우선순위</label>
           <select id="edit-priority" v-model="editingKeyword.priority">
-            <option>상</option>
-            <option>중</option>
-            <option>하</option>
+            <option>상</option><option>중</option><option>하</option>
           </select>
         </div>
         <div class="form-group">
@@ -207,7 +182,7 @@ const handleUpdateKeyword = async () => {
 </template>
 
 <style scoped>
-/* 기존 CSS는 유지하고 아래 내용을 추가하거나 수정하세요 */
+/* CSS는 이전과 동일하게 유지해도 됩니다. */
 .dashboard-container {
   padding: 2rem;
   max-width: 1200px;
@@ -233,10 +208,6 @@ h1 { font-size: 2rem; }
   margin-top: 0.25rem;
   word-break: break-all;
 }
-.rank {
-  color: #007bff;
-  font-weight: bold;
-}
 .add-new-row input, .add-new-row select {
   width: 100%;
   padding: 0.5rem;
@@ -250,10 +221,9 @@ h1 { font-size: 2rem; }
   color: #888;
 }
 
-/* --- 버튼 스타일 추가 --- */
 .management-buttons {
   display: flex;
-  gap: 0.5rem; /* 버튼 사이 간격 */
+  gap: 0.5rem;
 }
 
 .check-btn, .add-btn, .edit-btn, .delete-btn, .save-btn, .cancel-btn {
@@ -262,7 +232,7 @@ h1 { font-size: 2rem; }
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.9rem;
-  white-space: nowrap; /* 버튼 텍스트가 줄바꿈되지 않도록 */
+  white-space: nowrap;
 }
 
 .check-btn { background-color: #28a745; color: white; }
@@ -271,51 +241,26 @@ h1 { font-size: 2rem; }
 .edit-btn { background-color: #ffc107; color: #212529; }
 .delete-btn { background-color: #dc3545; color: white; }
 
-
-/* --- 모달(팝업) 스타일 추가 --- */
 .modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
   background-color: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  display: flex; justify-content: center; align-items: center; z-index: 1000;
 }
 .modal-content {
-  background-color: white;
-  padding: 2rem;
-  border-radius: 8px;
-  width: 90%;
-  max-width: 500px;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  background-color: white; padding: 2rem; border-radius: 8px;
+  width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
 }
-.modal-content h2 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-}
-.form-group {
-  margin-bottom: 1rem;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-}
+.modal-content h2 { margin-top: 0; margin-bottom: 1.5rem; }
+.form-group { margin-bottom: 1rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; }
 .form-group input, .form-group select {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 1rem;
+  width: 100%; padding: 0.75rem; border: 1px solid #ccc;
+  border-radius: 4px; font-size: 1rem;
 }
 .modal-buttons {
-  margin-top: 2rem;
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
+  margin-top: 2rem; display: flex;
+  justify-content: flex-end; gap: 0.5rem;
 }
 .save-btn { background-color: #007bff; color: white; }
 .cancel-btn { background-color: #6c757d; color: white; }
