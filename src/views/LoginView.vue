@@ -1,33 +1,10 @@
-<script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router' // vue-router 가져오기
-import { useAuthStore } from '@/stores/auth' // Pinia store 가져오기
-
-const email = ref('')
-const password = ref('')
-const router = useRouter() // router 사용 준비
-const authStore = useAuthStore() // Pinia store 사용 준비
-
-const handleLogin = async () => {
-  const success = await authStore.login(email.value, password.value)
-
-  if (success) {
-    // 로그인이 성공하면 대시보드 페이지로 이동
-    router.push('/dashboard')
-  } else {
-    // 실패 시 에러 메시지 표시
-    alert('로그인에 실패했습니다. 이메일 또는 비밀번호를 확인해주세요.');
-  }
-}
-</script>
-
 <template>
   <div class="login-container">
     <div class="login-box">
       <h2>로그인</h2>
       <form @submit.prevent="handleLogin">
         <div class="input-group">
-          <label for="email">아이디</label>
+          <label for="email">이메일</label>
           <input type="email" id="email" v-model="email" required>
         </div>
         <div class="input-group">
@@ -36,20 +13,82 @@ const handleLogin = async () => {
         </div>
         <button type="submit" class="login-button">로그인</button>
       </form>
-      <div class="divider">또는</div>
-      <button type="button" class="google-login-button">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg" alt="Google logo" class="google-icon">
-        Google로 로그인
-      </button>
-<div class="signup-link">
-  계정이 없으신가요? <RouterLink to="/register">회원가입</RouterLink>
-</div>
+      
+      <div class="divider">
+        <span>또는</span>
+      </div>
+      
+      <!-- 구글 로그인 버튼 -->
+      <div id="g_id_onload"
+           :data-client_id="googleClientId"
+           data-callback="handleGoogleResponse"
+           data-auto_prompt="false">
+      </div>
+      <div class="g_id_signin" 
+           data-type="standard"
+           data-size="large"
+           data-theme="filled_black"
+           data-text="signin_with"
+           data-shape="rectangular"
+           data-logo_alignment="left">
+      </div>
+      
+      <div class="signup-link">
+        계정이 없으신가요? <RouterLink to="/register">회원가입</RouterLink>
+      </div>
     </div>
   </div>
 </template>
 
+<script setup>
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+import axios from 'axios'
+
+const email = ref('')
+const password = ref('')
+const router = useRouter()
+const authStore = useAuthStore()
+const googleClientId = ref(import.meta.env.VITE_GOOGLE_CLIENT_ID || '')
+
+const handleLogin = async () => {
+  const success = await authStore.login(email.value, password.value)
+  if (success) {
+    router.push('/dashboard')
+  } else {
+    alert('로그인에 실패했습니다. 이메일 또는 비밀번호를 확인해주세요.')
+  }
+}
+
+// 구글 로그인 응답 처리
+window.handleGoogleResponse = async (response) => {
+  try {
+    const res = await axios.post('http://localhost:5000/auth/google-login', {
+      credential: response.credential
+    })
+    
+    if (res.data.token) {
+      localStorage.setItem('token', res.data.token)
+      authStore.token = res.data.token
+      router.push('/dashboard')
+    }
+  } catch (error) {
+    console.error('구글 로그인 실패:', error)
+    alert('구글 로그인에 실패했습니다.')
+  }
+}
+
+onMounted(() => {
+  const script = document.createElement('script')
+  script.src = 'https://accounts.google.com/gsi/client'
+  script.async = true
+  script.defer = true
+  document.head.appendChild(script)
+})
+</script>
+
 <style scoped>
-/* 전체 배경 */
 .login-container {
   display: flex;
   justify-content: center;
@@ -62,7 +101,6 @@ const handleLogin = async () => {
   box-sizing: border-box;
 }
 
-/* 로그인 박스 */
 .login-box {
   background: #1e1e1e;
   padding: 2.5rem;
@@ -99,10 +137,9 @@ h2 {
   border-radius: 4px;
   color: #e0e0e0;
   font-size: 1rem;
-  box-sizing: border-box; /* <-- 이 줄을 추가하세요 */
+  box-sizing: border-box;
 }
 
-/* 버튼 스타일 */
 .login-button {
   width: 100%;
   padding: 0.75rem;
@@ -113,56 +150,54 @@ h2 {
   cursor: pointer;
   font-size: 1rem;
   margin-bottom: 1.5rem;
-  box-sizing: border-box; /* <-- 이 줄을 추가하세요 */
-  transition: background-color 0.2s;
+  box-sizing: border-box;
 }
+
 .login-button:hover {
   background-color: #444;
 }
 
-.google-login-button {
-  width: 100%;
-  padding: 0.75rem;
-  background-color: #ffffff;
-  color: #202124;
-  border: 1px solid #dadce0;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 1rem;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 0.5rem; /* 아이콘과 텍스트 사이 간격 */
-  box-sizing: border-box; /* <-- 이 줄을 추가하세요 */
-  transition: background-color 0.2s;
-}
-.google-login-button:hover {
-  background-color: #f8f9fa;
-}
-
-.google-icon {
-  width: 18px;
-  height: 18px;
-}
-
-/* 구분선 */
 .divider {
   text-align: center;
-  color: #a0a0a0;
+  margin: 1.5rem 0;
+  position: relative;
+}
+
+.divider span {
+  background: #1e1e1e;
+  padding: 0 1rem;
+  position: relative;
+  color: #666;
+}
+
+.divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: #333;
+  z-index: -1;
+}
+
+.g_id_signin {
+  width: 100%;
   margin-bottom: 1.5rem;
 }
 
-/* 회원가입 링크 */
 .signup-link {
   text-align: center;
   margin-top: 1.5rem;
   font-size: 0.9rem;
   color: #a0a0a0;
 }
+
 .signup-link a {
   color: #4a90e2;
   text-decoration: none;
 }
+
 .signup-link a:hover {
   text-decoration: underline;
 }
