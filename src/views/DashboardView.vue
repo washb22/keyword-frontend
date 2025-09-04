@@ -104,36 +104,37 @@ const handleUpdateKeyword = async () => {
   }
 };
 
-// 수정된 상태(순위) 표시 함수
-const formatStatus = (keyword) => {
-  console.log('formatStatus 호출됨:', keyword); // 디버깅용
-  
-  // 순위가 있는 경우
-  if (keyword.ranking && keyword.ranking > 0) {
-    // section이 있으면 사용, 없으면 ranking_status 대신 적절한 기본값
-    let sectionName = keyword.section;
-    
-    // section이 없거나 ranking_status와 같으면 적절한 섹션명 설정
-    if (!sectionName || sectionName === keyword.ranking_status) {
-      // ranking_status에 따라 적절한 섹션명 할당
-      if (keyword.ranking_status === 'VIEW') {
-        sectionName = 'VIEW';
-      } else if (keyword.ranking_status === '카페') {
-        sectionName = '카페';
-      } else if (keyword.ranking_status === '블로그') {
-        sectionName = '블로그';
-      } else {
-        sectionName = '통합검색'; // 기본값
-      }
-    }
-    
-    return `${sectionName} (${keyword.ranking}위)`;
+// 시간을 한국 시간으로 변환해주는 헬퍼 함수
+const formatKoreanTime = (utcIsoString) => {
+  // 시간이 없는 경우
+  if (!utcIsoString) {
+    return '아직 확인 안 함';
   }
-  
-  // 순위가 없는 경우 상태만 표시
-  return keyword.ranking_status || '확인 대기';
+
+  // 백엔드에서 온 시간 문자열에 UTC 꼬리표 'Z'가 없으면 강제로 붙여줍니다.
+  // 이렇게 하면 new Date()가 이 시간을 항상 UTC로 인식하게 됩니다.
+  let dateString = utcIsoString;
+  if (!dateString.endsWith('Z')) {
+    dateString += 'Z';
+  }
+
+  // UTC로 인식된 시간을 한국 시간 형식으로 변환하여 반환합니다.
+  return new Date(dateString).toLocaleString('ko-KR');
 };
 
+
+const formatStatus = (keyword) => {
+  // 1. 순위가 있고(ranking > 0), 백엔드에서 정확한 섹션명(section)을 받았을 때
+  if (keyword.ranking && keyword.ranking > 0 && keyword.section) {
+    // 백엔드에서 보내준 정확한 섹션명을 그대로 표시합니다.
+    // 예: "치열연고 인기글 (2위)"
+    return `${keyword.section} (${keyword.ranking}위)`;
+  }
+  
+  // 2. 그 외의 경우 (순위가 없거나, 확인 대기 상태 등)
+  // 기존처럼 ranking_status 값을 그대로 보여줍니다.
+  return keyword.ranking_status || '확인 대기';
+};
 
 // 상태에 따른 CSS 클래스 반환
 const getStatusClass = (keyword) => {
@@ -162,9 +163,9 @@ const getStatusClass = (keyword) => {
       <table class="keyword-table">
         <thead>
           <tr>
-            <th>우선순위</th>
+            <th>중요도</th>
             <th>키워드 / URL</th>
-            <th>상태 (순위)</th>
+            <th>탭 (순위)</th>
             <th>마지막 확인</th>
             <th>관리</th>
           </tr>
@@ -182,7 +183,7 @@ const getStatusClass = (keyword) => {
                 {{ formatStatus(keyword) }}
               </span>
             </td>
-            <td>{{ keyword.last_checked_at ? new Date(keyword.last_checked_at).toLocaleString('ko-KR') : '아직 확인 안 함' }}</td>
+            <td>{{ formatKoreanTime(keyword.last_checked_at) }}</td>
             <td class="management-buttons">
               <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id" class="check-btn">
                 {{ checkingId === keyword.id ? '확인중...' : '순위확인' }}
@@ -313,6 +314,7 @@ h1 { font-size: 2rem; }
   border-radius: 4px;
   font-size: 0.85rem;
   font-weight: bold;
+  white-space: nowrap; /* ✨ 이 한 줄만 추가해주세요! */
 }
 
 .status-excellent {
