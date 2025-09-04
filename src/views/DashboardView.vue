@@ -6,19 +6,19 @@ const keywords = ref([]);
 const isLoading = ref(true);
 const newKeyword = ref({
   keyword_text: '',
-  post_title: '',  // 추가
+  post_title: '',
   post_url: '',
   priority: '중'
 });
 const checkingId = ref(null);
 const isEditModalOpen = ref(false);
 const editingKeyword = ref(null);
+const isCheckingAll = ref(false);
 
 const fetchKeywords = async () => {
   isLoading.value = true;
   try {
     const response = await apiClient.get('/keyword/keywords');
-    console.log('키워드 데이터:', response.data.keywords); // 디버깅용
     keywords.value = response.data.keywords;
   } catch (error) {
     console.error("키워드 목록을 불러오는 데 실패했습니다:", error);
@@ -32,34 +32,55 @@ onMounted(fetchKeywords);
 
 const handleCreateKeyword = async () => {
   if (!newKeyword.value.keyword_text || !newKeyword.value.post_url) {
-    alert('키워드와 URL을 모두 입력해주세요.'); 
+    alert('키워드와 URL을 모두 입력해주세요.');
     return;
   }
   try {
     await apiClient.post('/keyword/keywords', newKeyword.value);
     newKeyword.value = { keyword_text: '', post_title: '', post_url: '', priority: '중' };
     fetchKeywords();
-  } catch (error) { 
-    console.error("키워드 생성 실패:", error); 
-    alert('키워드 생성에 실패했습니다.'); 
+  } catch (error) {
+    console.error("키워드 생성 실패:", error);
+    alert('키워드 생성에 실패했습니다.');
   }
 };
 
-const handleCheckRank = async (keywordId) => {
+const handleCheckRank = async (keywordId, isBatch = false) => {
   checkingId.value = keywordId;
   try {
-    console.log(`키워드 ID ${keywordId} 순위 확인 요청 중...`);
     const response = await apiClient.post(`/keyword/keywords/${keywordId}/check`);
-    console.log('순위 확인 응답:', response.data);
-    
-    alert(`순위 확인 완료!\n${response.data.message}`);
-    await fetchKeywords(); // 데이터 새로고침
-  } catch (error) { 
-    console.error("순위 확인 실패:", error); 
+    if (!isBatch) {
+      alert(`순위 확인 완료!\n${response.data.message}`);
+    }
+    await fetchKeywords();
+  } catch (error) {
+    console.error("순위 확인 실패:", error);
     const errorMessage = error.response?.data?.message || '순위 확인 중 오류가 발생했습니다.';
-    alert(errorMessage);
-  } finally { 
-    checkingId.value = null; 
+    if (!isBatch) {
+      alert(errorMessage);
+    }
+    throw error;
+  } finally {
+    checkingId.value = null;
+  }
+};
+
+const handleCheckAllRanks = async () => {
+  if (!confirm(`총 ${keywords.value.length}개의 키워드 순위를 모두 확인하시겠습니까?\n시간이 다소 걸릴 수 있습니다.`)) {
+    return;
+  }
+  isCheckingAll.value = true;
+  try {
+    for (const keyword of keywords.value) {
+      console.log(`'${keyword.keyword_text}' 순위 확인 시작 (전체 확인)`);
+      await handleCheckRank(keyword.id, true);
+    }
+    alert('모든 키워드의 순위 확인이 완료되었습니다!');
+  } catch (error) {
+    console.error("전체 순위 확인 중 오류 발생:", error);
+    alert('전체 순위 확인을 진행하던 중 오류가 발생했습니다.');
+  } finally {
+    isCheckingAll.value = false;
   }
 };
 
@@ -69,9 +90,9 @@ const handleDeleteKeyword = async (keywordId) => {
     await apiClient.delete(`/keyword/keywords/${keywordId}`);
     alert('키워드가 삭제되었습니다.');
     fetchKeywords();
-  } catch (error) { 
-    console.error("키워드 삭제 실패:", error); 
-    alert('키워드 삭제에 실패했습니다.'); 
+  } catch (error) {
+    console.error("키워드 삭제 실패:", error);
+    alert('키워드 삭제에 실패했습니다.');
   }
 };
 
@@ -89,54 +110,28 @@ const handleUpdateKeyword = async () => {
   if (!editingKeyword.value) return;
   try {
     const { id, keyword_text, post_title, post_url, priority } = editingKeyword.value;
-    await apiClient.put(`/keyword/keywords/${id}`, { 
-      keyword_text, 
-      post_title,  // 이 부분 추가
-      post_url, 
-      priority 
+    await apiClient.put(`/keyword/keywords/${id}`, {
+      keyword_text,
+      post_title,
+      post_url,
+      priority
     });
     alert('키워드가 성공적으로 수정되었습니다.');
     closeEditModal();
     fetchKeywords();
-  } catch (error) { 
-    console.error("키워드 수정 실패:", error); 
-    alert('키워드 수정에 실패했습니다.'); 
+  } catch (error) {
+    console.error("키워드 수정 실패:", error);
+    alert('키워드 수정에 실패했습니다.');
   }
 };
-
-// 시간을 한국 시간으로 변환해주는 헬퍼 함수
-const formatKoreanTime = (utcIsoString) => {
-  // 시간이 없는 경우
-  if (!utcIsoString) {
-    return '아직 확인 안 함';
-  }
-
-  // 백엔드에서 온 시간 문자열에 UTC 꼬리표 'Z'가 없으면 강제로 붙여줍니다.
-  // 이렇게 하면 new Date()가 이 시간을 항상 UTC로 인식하게 됩니다.
-  let dateString = utcIsoString;
-  if (!dateString.endsWith('Z')) {
-    dateString += 'Z';
-  }
-
-  // UTC로 인식된 시간을 한국 시간 형식으로 변환하여 반환합니다.
-  return new Date(dateString).toLocaleString('ko-KR');
-};
-
 
 const formatStatus = (keyword) => {
-  // 1. 순위가 있고(ranking > 0), 백엔드에서 정확한 섹션명(section)을 받았을 때
   if (keyword.ranking && keyword.ranking > 0 && keyword.section) {
-    // 백엔드에서 보내준 정확한 섹션명을 그대로 표시합니다.
-    // 예: "치열연고 인기글 (2위)"
     return `${keyword.section} (${keyword.ranking}위)`;
   }
-  
-  // 2. 그 외의 경우 (순위가 없거나, 확인 대기 상태 등)
-  // 기존처럼 ranking_status 값을 그대로 보여줍니다.
   return keyword.ranking_status || '확인 대기';
 };
 
-// 상태에 따른 CSS 클래스 반환
 const getStatusClass = (keyword) => {
   if (keyword.ranking && keyword.ranking > 0) {
     if (keyword.ranking <= 3) return 'status-excellent';
@@ -148,12 +143,26 @@ const getStatusClass = (keyword) => {
   }
   return 'status-waiting';
 };
+
+const formatKoreanTime = (utcIsoString) => {
+  if (!utcIsoString) {
+    return '아직 확인 안 함';
+  }
+  let dateString = utcIsoString;
+  if (!dateString.endsWith('Z')) {
+    dateString += 'Z';
+  }
+  return new Date(dateString).toLocaleString('ko-KR');
+};
 </script>
 
 <template>
   <div class="dashboard-container">
     <header class="dashboard-header">
       <h1>대시보드</h1>
+      <button @click="handleCheckAllRanks" :disabled="isCheckingAll" class="check-all-btn">
+        {{ isCheckingAll ? '전체 순위 확인 중...' : '전체 순위 확인' }}
+      </button>
     </header>
 
     <div v-if="isLoading">
@@ -163,11 +172,11 @@ const getStatusClass = (keyword) => {
       <table class="keyword-table">
         <thead>
           <tr>
-            <th>중요도</th>
-            <th>키워드 / URL</th>
-            <th>탭 (순위)</th>
-            <th>마지막 확인</th>
-            <th>관리</th>
+            <th class="col-priority">중요도</th>
+            <th class="col-keyword">키워드 / URL</th>
+            <th class="col-status">탭 (순위)</th>
+            <th class="col-checked-at">마지막 확인</th>
+            <th class="col-manage">관리</th>
           </tr>
         </thead>
         <tbody>
@@ -175,7 +184,7 @@ const getStatusClass = (keyword) => {
             <td>{{ keyword.priority }}</td>
             <td>
               <div class="keyword-text">{{ keyword.keyword_text }}</div>
-              <div class="keyword-title" v-if="keyword.post_title">📝 {{ keyword.post_title }}</div>  <!-- 추가 -->
+              <div class="keyword-title" v-if="keyword.post_title">📝 {{ keyword.post_title }}</div>
               <div class="keyword-url">{{ keyword.post_url }}</div>
             </td>
             <td>
@@ -185,7 +194,7 @@ const getStatusClass = (keyword) => {
             </td>
             <td>{{ formatKoreanTime(keyword.last_checked_at) }}</td>
             <td class="management-buttons">
-              <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id" class="check-btn">
+              <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id || isCheckingAll" class="check-btn">
                 {{ checkingId === keyword.id ? '확인중...' : '순위확인' }}
               </button>
               <button @click="openEditModal(keyword)" class="edit-btn">수정</button>
@@ -201,7 +210,7 @@ const getStatusClass = (keyword) => {
             </td>
             <td>
               <input type="text" v-model="newKeyword.keyword_text" placeholder="새 키워드를 입력하세요">
-              <input type="text" v-model="newKeyword.post_title" placeholder="게시물 제목" class="title-input">  <!-- 추가 -->
+              <input type="text" v-model="newKeyword.post_title" placeholder="게시물 제목" class="title-input">
               <input type="url" v-model="newKeyword.post_url" placeholder="https://..." class="url-input">
             </td>
             <td colspan="2"></td>
@@ -229,7 +238,7 @@ const getStatusClass = (keyword) => {
           <label for="edit-keyword">키워드</label>
           <input type="text" id="edit-keyword" v-model="editingKeyword.keyword_text" required>
         </div>
-        <div class="form-group">  <!-- 추가 -->
+        <div class="form-group">
           <label for="edit-title">게시물 제목</label>
           <input type="text" id="edit-title" v-model="editingKeyword.post_title" placeholder="게시물 제목 (선택사항)">
         </div>
@@ -252,25 +261,39 @@ const getStatusClass = (keyword) => {
   max-width: 1200px;
   margin: 0 auto;
 }
-.dashboard-header { margin-bottom: 2rem; }
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
 h1 { font-size: 2rem; }
 .keyword-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed; /* ✨ 테이블 레이아웃 고정 */
 }
 .keyword-table th, .keyword-table td {
   border-bottom: 1px solid #ddd;
   padding: 1rem;
   text-align: left;
   vertical-align: middle;
+  word-wrap: break-word; /* ✨ 긴 URL 줄바꿈 */
 }
 .keyword-table th { background-color: #f8f9fa; }
+
+/* ✨ [최종 수정] 각 열에 클래스를 부여하여 너비를 명확하게 제어 */
+.keyword-table .col-priority { width: 100px; text-align: center; }
+.keyword-table .col-keyword { width: 40%; }
+.keyword-table .col-status { width: 220px; }
+.keyword-table .col-checked-at { width: 180px; }
+.keyword-table .col-manage { width: 220px; }
+
 .keyword-text { font-weight: bold; }
 .keyword-url {
   font-size: 0.8rem;
   color: #666;
   margin-top: 0.25rem;
-  word-break: break-all;
 }
 .add-new-row input, .add-new-row select {
   width: 100%;
@@ -284,12 +307,10 @@ h1 { font-size: 2rem; }
   margin-top: 2rem;
   color: #888;
 }
-
 .management-buttons {
   display: flex;
   gap: 0.5rem;
 }
-
 .check-btn, .add-btn, .edit-btn, .delete-btn, .save-btn, .cancel-btn {
   border: none;
   padding: 0.4rem 0.8rem;
@@ -298,55 +319,39 @@ h1 { font-size: 2rem; }
   font-size: 0.9rem;
   white-space: nowrap;
 }
-
 .check-btn { background-color: #28a745; color: white; }
-.check-btn:disabled { 
-  background-color: #6c757d; 
-  cursor: not-allowed; 
+.check-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
 }
 .add-btn { background-color: #007bff; color: white; }
 .edit-btn { background-color: #ffc107; color: #212529; }
 .delete-btn { background-color: #dc3545; color: white; }
-
-/* 상태 배지 스타일 */
+.check-all-btn {
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  background-color: #17a2b8;
+  color: white;
+}
+.check-all-btn:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
 .status-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
   font-size: 0.85rem;
   font-weight: bold;
-  white-space: nowrap; /* ✨ 이 한 줄만 추가해주세요! */
+  white-space: nowrap;
 }
-
-.status-excellent {
-  background-color: #d4edda;
-  color: #155724;
-  border: 1px solid #c3e6cb;
-}
-
-.status-good {
-  background-color: #d1ecf1;
-  color: #0c5460;
-  border: 1px solid #bee5eb;
-}
-
-.status-normal {
-  background-color: #fff3cd;
-  color: #856404;
-  border: 1px solid #ffeeba;
-}
-
-.status-not-exposed {
-  background-color: #f8d7da;
-  color: #721c24;
-  border: 1px solid #f5c6cb;
-}
-
-.status-waiting {
-  background-color: #e2e3e5;
-  color: #495057;
-  border: 1px solid #d6d8db;
-}
-
+.status-excellent { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.status-good { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+.status-normal { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+.status-not-exposed { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.status-waiting { background-color: #e2e3e5; color: #495057; border: 1px solid #d6d8db; }
 .modal-overlay {
   position: fixed; top: 0; left: 0;
   width: 100%; height: 100%;
@@ -370,7 +375,7 @@ h1 { font-size: 2rem; }
 }
 .save-btn { background-color: #007bff; color: white; }
 .cancel-btn { background-color: #6c757d; color: white; }
-.title-input {  /* 이 부분 추가 */
+.title-input {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
