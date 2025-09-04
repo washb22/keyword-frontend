@@ -1,4 +1,4 @@
-// src/stores/auth.js
+// src/stores/auth.js 수정 버전
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
 import axios from 'axios'
@@ -24,5 +24,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, login }
+  // 로그아웃 액션 (새로 추가)
+  function logout() {
+    token.value = null
+    localStorage.removeItem('token')
+  }
+
+  return { token, login, logout }
 })

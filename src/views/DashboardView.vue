@@ -1,7 +1,11 @@
 <script setup>
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 import apiClient from '@/api';
 
+const router = useRouter();
+const authStore = useAuthStore();
 const keywords = ref([]);
 const isLoading = ref(true);
 const newKeyword = ref({
@@ -29,6 +33,48 @@ const fetchKeywords = async () => {
 };
 
 onMounted(fetchKeywords);
+
+const handleLogout = () => {
+  if (confirm('로그아웃 하시겠습니까?')) {
+    authStore.logout();
+    router.push('/login');
+  }
+};
+
+const exportToExcel = () => {
+  const data = [
+    ['중요도', '키워드', '게시물 제목', 'URL', '순위', '섹션', '마지막 확인'],
+    ...keywords.value.map(keyword => [
+      keyword.priority,
+      keyword.keyword_text,
+      keyword.post_title || '',
+      keyword.post_url,
+      keyword.ranking || '',
+      keyword.section || '',
+      formatKoreanTime(keyword.last_checked_at)
+    ])
+  ];
+  
+  let excelContent = '<table>';
+  data.forEach(row => {
+    excelContent += '<tr>';
+    row.forEach(cell => {
+      excelContent += `<td>${cell}</td>`;
+    });
+    excelContent += '</tr>';
+  });
+  excelContent += '</table>';
+  
+  const blob = new Blob([excelContent], { type: 'application/vnd.ms-excel' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', `키워드_순위_${new Date().toISOString().split('T')[0]}.xls`);
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 
 const handleCreateKeyword = async () => {
   if (!newKeyword.value.keyword_text || !newKeyword.value.post_url) {
@@ -160,9 +206,13 @@ const formatKoreanTime = (utcIsoString) => {
   <div class="dashboard-container">
     <header class="dashboard-header">
       <h1>대시보드</h1>
-      <button @click="handleCheckAllRanks" :disabled="isCheckingAll" class="check-all-btn">
-        {{ isCheckingAll ? '전체 순위 확인 중...' : '전체 순위 확인' }}
-      </button>
+      <div class="header-actions">
+        <button @click="exportToExcel" class="export-btn">Excel 내보내기</button>
+        <button @click="handleCheckAllRanks" :disabled="isCheckingAll" class="check-all-btn">
+          {{ isCheckingAll ? '전체 순위 확인 중...' : '전체 순위 확인' }}
+        </button>
+        <button @click="handleLogout" class="logout-btn">로그아웃</button>
+      </div>
     </header>
 
     <div v-if="isLoading">
@@ -170,13 +220,20 @@ const formatKoreanTime = (utcIsoString) => {
     </div>
     <div v-else>
       <table class="keyword-table">
+        <colgroup>
+          <col style="width: 100px;">
+          <col style="width: 40%;">
+          <col style="width: 220px;">
+          <col style="width: 180px;">
+          <col style="width: 220px;">
+        </colgroup>
         <thead>
           <tr>
-            <th class="col-priority">중요도</th>
-            <th class="col-keyword">키워드 / URL</th>
-            <th class="col-status">탭 (순위)</th>
-            <th class="col-checked-at">마지막 확인</th>
-            <th class="col-manage">관리</th>
+            <th>중요도</th>
+            <th>키워드 / URL</th>
+            <th>탭 (순위)</th>
+            <th>마지막 확인</th>
+            <th>관리</th>
           </tr>
         </thead>
         <tbody>
@@ -193,12 +250,14 @@ const formatKoreanTime = (utcIsoString) => {
               </span>
             </td>
             <td>{{ formatKoreanTime(keyword.last_checked_at) }}</td>
-            <td class="management-buttons">
-              <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id || isCheckingAll" class="check-btn">
-                {{ checkingId === keyword.id ? '확인중...' : '순위확인' }}
-              </button>
-              <button @click="openEditModal(keyword)" class="edit-btn">수정</button>
-              <button @click="handleDeleteKeyword(keyword.id)" class="delete-btn">삭제</button>
+            <td>
+              <div class="management-buttons">
+                <button @click="handleCheckRank(keyword.id)" :disabled="checkingId === keyword.id || isCheckingAll" class="check-btn">
+                  {{ checkingId === keyword.id ? '확인중...' : '순위확인' }}
+                </button>
+                <button @click="openEditModal(keyword)" class="edit-btn">수정</button>
+                <button @click="handleDeleteKeyword(keyword.id)" class="delete-btn">삭제</button>
+              </div>
             </td>
           </tr>
           
@@ -213,9 +272,11 @@ const formatKoreanTime = (utcIsoString) => {
               <input type="text" v-model="newKeyword.post_title" placeholder="게시물 제목" class="title-input">
               <input type="url" v-model="newKeyword.post_url" placeholder="https://..." class="url-input">
             </td>
-            <td colspan="2"></td>
+            <td colspan="3"></td>
             <td>
-              <button @click="handleCreateKeyword" class="add-btn">추가</button>
+              <div class="management-buttons">
+                <button @click="handleCreateKeyword" class="add-btn">추가</button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -261,56 +322,110 @@ const formatKoreanTime = (utcIsoString) => {
   max-width: 1200px;
   margin: 0 auto;
 }
+
 .dashboard-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
-h1 { font-size: 2rem; }
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.export-btn {
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  background-color: #6c757d;
+  color: white;
+  white-space: nowrap;
+}
+
+.export-btn:hover {
+  background-color: #5a6268;
+}
+
+.logout-btn {
+  border: none;
+  padding: 0.6rem 1.2rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 1rem;
+  background-color: #dc3545;
+  color: white;
+  white-space: nowrap;
+}
+
+.logout-btn:hover {
+  background-color: #c82333;
+}
+
+h1 { 
+  font-size: 2rem; 
+}
+
 .keyword-table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed; /* ✨ 테이블 레이아웃 고정 */
+  table-layout: fixed;
 }
+
 .keyword-table th, .keyword-table td {
-  border-bottom: 1px solid #ddd;
   padding: 1rem;
   text-align: left;
   vertical-align: middle;
-  word-wrap: break-word; /* ✨ 긴 URL 줄바꿈 */
+  border-bottom: 1px solid #ddd;
+  height: 60px; /* 🔥 모든 셀에 동일한 높이 적용 */
 }
-.keyword-table th { background-color: #f8f9fa; }
 
-/* ✨ [최종 수정] 각 열에 클래스를 부여하여 너비를 명확하게 제어 */
-.keyword-table .col-priority { width: 100px; text-align: center; }
-.keyword-table .col-keyword { width: 40%; }
-.keyword-table .col-status { width: 220px; }
-.keyword-table .col-checked-at { width: 180px; }
-.keyword-table .col-manage { width: 220px; }
+.keyword-table th { 
+  background-color: #f8f9fa;
+  font-weight: bold;
+  height: 50px; /* 헤더는 조금 작게 */
+}
 
-.keyword-text { font-weight: bold; }
+.keyword-table td:first-child,
+.keyword-table th:first-child {
+  text-align: center;
+}
+
+.keyword-text { 
+  font-weight: bold; 
+}
+
 .keyword-url {
   font-size: 0.8rem;
   color: #666;
   margin-top: 0.25rem;
+  word-break: break-all;
 }
-.add-new-row input, .add-new-row select {
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+
+.keyword-title {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0.2rem 0;
+  font-style: italic;
 }
-.add-new-row .url-input { margin-top: 0.5rem; }
-.no-keywords-msg {
-  text-align: center;
-  margin-top: 2rem;
-  color: #888;
-}
+
+/* 🔥 관리 버튼 컨테이너 */
 .management-buttons {
   display: flex;
   gap: 0.5rem;
+  align-items: center;
+  height: 100%; /* 부모 셀 높이에 맞춤 */
+  justify-content: flex-start;
 }
+
+/* 🔥 모든 버튼 스타일 통일 */
 .check-btn, .add-btn, .edit-btn, .delete-btn, .save-btn, .cancel-btn {
   border: none;
   padding: 0.4rem 0.8rem;
@@ -318,15 +433,37 @@ h1 { font-size: 2rem; }
   cursor: pointer;
   font-size: 0.9rem;
   white-space: nowrap;
+  height: 32px; /* 고정 높이 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.check-btn { background-color: #28a745; color: white; }
-.check-btn:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
+
+.check-btn { 
+  background-color: #28a745; 
+  color: white; 
 }
-.add-btn { background-color: #007bff; color: white; }
-.edit-btn { background-color: #ffc107; color: #212529; }
-.delete-btn { background-color: #dc3545; color: white; }
+
+.check-btn:disabled { 
+  background-color: #6c757d; 
+  cursor: not-allowed; 
+}
+
+.add-btn { 
+  background-color: #007bff; 
+  color: white; 
+}
+
+.edit-btn { 
+  background-color: #ffc107; 
+  color: #212529; 
+}
+
+.delete-btn { 
+  background-color: #dc3545; 
+  color: white; 
+}
+
 .check-all-btn {
   border: none;
   padding: 0.6rem 1.2rem;
@@ -336,10 +473,12 @@ h1 { font-size: 2rem; }
   background-color: #17a2b8;
   color: white;
 }
-.check-all-btn:disabled {
-  background-color: #6c757d;
-  cursor: not-allowed;
+
+.check-all-btn:disabled { 
+  background-color: #6c757d; 
+  cursor: not-allowed; 
 }
+
 .status-badge {
   padding: 0.25rem 0.5rem;
   border-radius: 4px;
@@ -347,42 +486,119 @@ h1 { font-size: 2rem; }
   font-weight: bold;
   white-space: nowrap;
 }
-.status-excellent { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
-.status-good { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
-.status-normal { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
-.status-not-exposed { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-.status-waiting { background-color: #e2e3e5; color: #495057; border: 1px solid #d6d8db; }
-.modal-overlay {
-  position: fixed; top: 0; left: 0;
-  width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.6);
-  display: flex; justify-content: center; align-items: center; z-index: 1000;
+
+.status-excellent { 
+  background-color: #d4edda; 
+  color: #155724; 
+  border: 1px solid #c3e6cb; 
 }
-.modal-content {
-  background-color: white; padding: 2rem; border-radius: 8px;
-  width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+
+.status-good { 
+  background-color: #d1ecf1; 
+  color: #0c5460; 
+  border: 1px solid #bee5eb; 
 }
-.modal-content h2 { margin-top: 0; margin-bottom: 1.5rem; }
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; margin-bottom: 0.5rem; }
-.form-group input, .form-group select {
-  width: 100%; padding: 0.75rem; border: 1px solid #ccc;
-  border-radius: 4px; font-size: 1rem;
+
+.status-normal { 
+  background-color: #fff3cd; 
+  color: #856404; 
+  border: 1px solid #ffeeba; 
 }
-.modal-buttons {
-  margin-top: 2rem; display: flex;
-  justify-content: flex-end; gap: 0.5rem;
+
+.status-not-exposed { 
+  background-color: #f8d7da; 
+  color: #721c24; 
+  border: 1px solid #f5c6cb; 
 }
-.save-btn { background-color: #007bff; color: white; }
-.cancel-btn { background-color: #6c757d; color: white; }
+
+.status-waiting { 
+  background-color: #e2e3e5; 
+  color: #495057; 
+  border: 1px solid #d6d8db; 
+}
+
+/* 추가 행 스타일 */
+.add-new-row input, .add-new-row select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.add-new-row .url-input { 
+  margin-top: 0.5rem; 
+}
+
 .title-input {
   margin-top: 0.5rem;
   margin-bottom: 0.5rem;
 }
-.keyword-title {
-  font-size: 0.85rem;
-  color: #555;
-  margin: 0.2rem 0;
-  font-style: italic;
+
+.no-keywords-msg {
+  text-align: center;
+  margin-top: 2rem;
+  color: #888;
+}
+
+/* 모달 스타일 */
+.modal-overlay {
+  position: fixed; 
+  top: 0; 
+  left: 0;
+  width: 100%; 
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex; 
+  justify-content: center; 
+  align-items: center; 
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white; 
+  padding: 2rem; 
+  border-radius: 8px;
+  width: 90%; 
+  max-width: 500px; 
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+.modal-content h2 { 
+  margin-top: 0; 
+  margin-bottom: 1.5rem; 
+}
+
+.form-group { 
+  margin-bottom: 1rem; 
+}
+
+.form-group label { 
+  display: block; 
+  margin-bottom: 0.5rem; 
+}
+
+.form-group input, .form-group select {
+  width: 100%; 
+  padding: 0.75rem; 
+  border: 1px solid #ccc;
+  border-radius: 4px; 
+  font-size: 1rem;
+}
+
+.modal-buttons {
+  margin-top: 2rem; 
+  display: flex;
+  justify-content: flex-end; 
+  gap: 0.5rem;
+}
+
+.save-btn { 
+  background-color: #007bff; 
+  color: white; 
+}
+
+.cancel-btn { 
+  background-color: #6c757d; 
+  color: white; 
 }
 </style>
