@@ -44,7 +44,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import axios from 'axios'
+import apiClient from '@/api'  // 추가
+
 
 const email = ref('')
 const password = ref('')
@@ -64,7 +65,7 @@ const handleLogin = async () => {
 // 구글 로그인 응답 처리
 window.handleGoogleResponse = async (response) => {
   try {
-    const res = await axios.post('http://localhost:5000/auth/google-login', {
+    const res = await apiClient.post('/auth/google-login', {  // axios 대신 apiClient
       credential: response.credential
     })
     

@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
+import apiClient from '@/api'  // axios 대신 apiClient import
 
 const email = ref('')
 const password = ref('')
@@ -9,8 +9,7 @@ const router = useRouter()
 
 const handleRegister = async () => {
   try {
-    // 백엔드의 '/register' API로 요청을 보냅니다.
-    await axios.post('http://localhost:5000/auth/register', {
+    await apiClient.post('/auth/register', {  // apiClient 사용
       email: email.value,
       password: password.value
     });
