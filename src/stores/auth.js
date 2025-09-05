@@ -1,12 +1,12 @@
 // src/stores/auth.js
 import { ref } from 'vue'
 import { defineStore } from 'pinia'
-import axios from 'axios'
+import apiClient from '@/api'  // axios 대신 apiClient import
 
 export const useAuthStore = defineStore('auth', () => {
   const token = ref(localStorage.getItem('token') || null)
   const userEmail = ref(null)
-
+  
   async function login(email, password) {
     try {
       const response = await apiClient.post('/auth/login', {
@@ -22,12 +22,12 @@ export const useAuthStore = defineStore('auth', () => {
       return false
     }
   }
-
+  
   function logout() {
     token.value = null
     userEmail.value = null
     localStorage.removeItem('token')
   }
-
+  
   return { token, userEmail, login, logout }
 })
