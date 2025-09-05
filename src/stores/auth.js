@@ -9,7 +9,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(email, password) {
     try {
-      const response = await axios.post('http://localhost:5000/auth/login', {
+      const response = await apiClient.post('/auth/login', {
         email: email,
         password: password
       })
